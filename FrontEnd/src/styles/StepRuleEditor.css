@@ -1,0 +1,556 @@
+/* ============================================================
+   STEPRULEEDITOR.CSS — Premium SaaS · Halleyx Workflow Engine
+   Page: src/pages/StepRuleEditor.jsx
+   ============================================================ */
+
+/* ── Page wrapper ──────────────────────────────────────────── */
+.step-rule-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  animation: fadeIn var(--duration-slow) var(--ease-smooth) both;
+}
+
+/* ── Selector row ──────────────────────────────────────────── */
+.rule-selector-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+/* ── Selector cards ────────────────────────────────────────── */
+.rule-selector-card {
+  background: linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(255,255,255,0.95) 100%);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: var(--radius-xl);
+  padding: var(--space-5) var(--space-5);
+  box-shadow:
+    0 20px 45px rgba(15, 23, 42, 0.07),
+    0 6px  16px rgba(15, 23, 42, 0.04);
+  position: relative;
+  overflow: hidden;
+  transition: box-shadow var(--duration-base) var(--ease-smooth);
+}
+
+/* Gradient border shimmer */
+.rule-selector-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(99,  102, 241, 0.18),
+    rgba(34,  211, 238, 0.08),
+    rgba(255, 255, 255, 0.50)
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box,
+                linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.rule-selector-card:hover {
+  box-shadow:
+    0 28px 60px rgba(15, 23, 42, 0.10),
+    0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+/* Top accent bar on hover */
+.rule-selector-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--brand-400), var(--accent-400));
+  opacity: 0;
+  transition: opacity var(--duration-base) var(--ease-smooth);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+
+.rule-selector-card:hover::after { opacity: 1; }
+
+.rule-selector-label {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-3);
+  display: block;
+  letter-spacing: var(--tracking-wide);
+}
+
+/* ── Rule select dropdown ──────────────────────────────────── */
+.rule-select {
+  width: 100%;
+  height: 36px;
+  padding: 0 32px 0 var(--space-3);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
+  color: var(--color-text-primary);
+  background:
+    linear-gradient(180deg, #ffffff 0%, #fbfdff 100%)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E")
+    no-repeat right 10px center;
+  border: 1px solid #d7e1ee;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-inset);
+  outline: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  transition:
+    border-color var(--duration-fast) var(--ease-fast),
+    box-shadow   var(--duration-fast) var(--ease-fast),
+    background   var(--duration-fast) var(--ease-fast);
+}
+
+.rule-select:hover {
+  border-color: var(--neutral-400);
+  background:
+    linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E")
+    no-repeat right 10px center;
+}
+
+.rule-select:focus {
+  border-color: var(--brand-500);
+  background:
+    #ffffff
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236366f1' d='M6 8L1 3h10z'/%3E%3C/svg%3E")
+    no-repeat right 10px center;
+  box-shadow:
+    0 0 0 1px rgba(99, 102, 241, 0.12),
+    0 0 0 4px rgba(99, 102, 241, 0.09),
+    var(--shadow-inset);
+}
+
+.rule-select:disabled {
+  background-color: var(--color-bg-subtle);
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── Add / Edit rule form card ─────────────────────────────── */
+.rule-form-card {
+  background: linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(255,255,255,0.96) 100%);
+  border: 1px solid rgba(165, 180, 252, 0.55);
+  border-radius: var(--radius-xl);
+  box-shadow:
+    0 0 0 4px rgba(99, 102, 241, 0.06),
+    0 20px 45px rgba(15, 23, 42, 0.08),
+    0 6px  16px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
+  animation: slideDown var(--duration-base) var(--ease-smooth) both;
+}
+
+.rule-form-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  background: linear-gradient(
+    135deg,
+    var(--brand-50)  0%,
+    #eef2ff          50%,
+    #f0f4ff         100%
+  );
+  border-bottom: 1px solid rgba(199, 210, 254, 0.55);
+}
+
+.rule-form-title {
+  font-size: var(--text-md);
+  font-weight: var(--font-semibold);
+  color: var(--brand-800);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  letter-spacing: -0.1px;
+}
+
+.rule-form-body {
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.rule-form-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 80px;
+  gap: var(--space-4);
+  align-items: end;
+}
+
+.rule-form-label {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-2);
+  display: block;
+  letter-spacing: var(--tracking-wide);
+}
+
+.rule-form-label .required-mark {
+  color: var(--color-danger-500);
+  margin-left: 2px;
+}
+
+/* ── Rule condition input ──────────────────────────────────── */
+.rule-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--neutral-800);
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  border: 1px solid #d7e1ee;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-inset);
+  outline: none;
+  letter-spacing: 0.1px;
+  transition:
+    border-color var(--duration-fast) var(--ease-fast),
+    box-shadow   var(--duration-fast) var(--ease-fast),
+    background   var(--duration-fast) var(--ease-fast);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.rule-input:hover {
+  border-color: var(--neutral-400);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.rule-input:focus {
+  border-color: var(--brand-500);
+  background: #ffffff;
+  font-family: var(--font-mono);
+  box-shadow:
+    0 0 0 1px rgba(99, 102, 241, 0.12),
+    0 0 0 4px rgba(99, 102, 241, 0.09),
+    var(--shadow-inset);
+}
+
+.rule-input--error {
+  border-color: var(--color-danger-500) !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12) !important;
+}
+
+.rule-input--number {
+  width: 80px;
+  text-align: center;
+  font-family: var(--font-sans);
+}
+
+/* ── Help text ─────────────────────────────────────────────── */
+.rule-help {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: var(--leading-relaxed);
+  margin-top: var(--space-1);
+}
+
+.rule-help code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: linear-gradient(135deg, var(--brand-50), #e8edff);
+  border: 1px solid rgba(165, 180, 252, 0.5);
+  border-radius: var(--radius-xs);
+  padding: 1px 5px;
+  color: var(--brand-700);
+}
+
+/* ── Form actions row ──────────────────────────────────────── */
+.rule-form-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid rgba(226, 232, 240, 0.7);
+  margin-top: var(--space-2);
+}
+
+/* ── Rules table card ──────────────────────────────────────── */
+.rule-table-card {
+  background: linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(255,255,255,0.95) 100%);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: var(--radius-xl);
+  box-shadow:
+    0 20px 45px rgba(15, 23, 42, 0.07),
+    0 6px  16px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
+  position: relative;
+  transition: box-shadow var(--duration-base) var(--ease-smooth);
+}
+
+/* Gradient border shimmer */
+.rule-table-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(99,  102, 241, 0.16),
+    rgba(34,  211, 238, 0.07),
+    rgba(255, 255, 255, 0.50)
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box,
+                linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.rule-table-card:hover {
+  box-shadow:
+    0 28px 60px rgba(15, 23, 42, 0.10),
+    0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+/* ── Table card header ─────────────────────────────────────── */
+.rule-table-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+  background: linear-gradient(
+    180deg,
+    rgba(248, 250, 252, 0.96) 0%,
+    rgba(255, 255, 255, 0.93) 100%
+  );
+}
+
+.rule-table-title {
+  font-size: var(--text-md);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  letter-spacing: -0.1px;
+}
+
+.rule-drag-hint {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-weight: var(--font-regular);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  opacity: 0.7;
+}
+
+/* ── Priority chip ─────────────────────────────────────────── */
+.rule-priority-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--brand-50) 0%, #dde5ff 100%);
+  border: 1px solid rgba(165, 180, 252, 0.65);
+  color: var(--brand-700);
+  font-size: var(--text-sm);
+  font-weight: var(--font-bold);
+  box-shadow: 0 1px 4px rgba(99, 102, 241, 0.16);
+  flex-shrink: 0;
+}
+
+/* ── Condition pill ────────────────────────────────────────── */
+.rule-condition-pill {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  background: linear-gradient(180deg, #f8fbff 0%, #edf2ff 100%);
+  border: 1px solid rgba(199, 210, 254, 0.70);
+  border-radius: var(--radius-sm);
+  padding: 3px 9px;
+  display: inline-block;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--neutral-700);
+  letter-spacing: 0.1px;
+  vertical-align: middle;
+}
+
+/* ── Next step pill ────────────────────────────────────────── */
+.rule-next-step-pill {
+  font-size: var(--text-sm);
+  background: linear-gradient(135deg, var(--color-info-50) 0%, #dbeafe 100%);
+  border: 1px solid rgba(147, 197, 253, 0.55);
+  color: var(--color-info-800);
+  border-radius: var(--radius-sm);
+  padding: 3px 9px;
+  display: inline-block;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+  font-weight: var(--font-medium);
+}
+
+/* ── End pill ──────────────────────────────────────────────── */
+.rule-end-pill {
+  font-size: 10px;
+  font-weight: var(--font-bold);
+  background: var(--neutral-100);
+  color: var(--neutral-500);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: var(--radius-sm);
+  padding: 3px 9px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+/* ── Rules table ───────────────────────────────────────────── */
+.rule-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.rule-table thead th {
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  font-size: 10px;
+  font-weight: var(--font-bold);
+  color: var(--color-text-muted);
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  background: linear-gradient(180deg, #f8fbff 0%, #f2f7fd 100%);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.rule-table tbody tr {
+  border-bottom: 1px solid var(--color-border);
+  transition:
+    background  var(--duration-fast) var(--ease-fast),
+    box-shadow  var(--duration-fast) var(--ease-fast);
+}
+
+.rule-table tbody tr:last-child { border-bottom: none; }
+
+.rule-table tbody tr:hover {
+  background: linear-gradient(
+    180deg,
+    rgba(99,  102, 241, 0.040),
+    rgba(34,  211, 238, 0.030)
+  );
+}
+
+.rule-table tbody tr.draggable-row {
+  cursor: grab;
+}
+
+.rule-table tbody tr.draggable-row:active {
+  cursor: grabbing;
+  background: linear-gradient(
+    180deg,
+    rgba(99, 102, 241, 0.06),
+    rgba(34, 211, 238, 0.04)
+  );
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.10);
+}
+
+.rule-table tbody td {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-base);
+  color: var(--color-text-primary);
+  vertical-align: middle;
+}
+
+/* ── Drag handle cell ──────────────────────────────────────── */
+.rule-drag-cell {
+  width: 36px;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 16px;
+  cursor: grab;
+  user-select: none;
+  opacity: 0.4;
+  transition: opacity var(--duration-fast) var(--ease-fast);
+}
+
+.rule-table tbody tr:hover .rule-drag-cell {
+  opacity: 0.85;
+  color: var(--brand-400);
+}
+
+/* ── Empty hint ────────────────────────────────────────────── */
+.rule-empty-hint {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-style: italic;
+  margin-top: var(--space-2);
+}
+
+/* ── Banners ───────────────────────────────────────────────── */
+.rule-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid;
+  font-size: var(--text-base);
+  line-height: var(--leading-relaxed);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+  animation: slideDown var(--duration-base) var(--ease-smooth) both;
+}
+
+.rule-banner--error {
+  background: linear-gradient(135deg, #fff1f2, #ffe4e6);
+  border-color: rgba(252, 165, 165, 0.60);
+  color: var(--color-danger-800);
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.08);
+}
+
+.rule-banner--success {
+  background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+  border-color: rgba(134, 239, 172, 0.60);
+  color: var(--color-success-800);
+  box-shadow: 0 4px 14px rgba(34, 197, 94, 0.08);
+}
+
+.rule-banner-close {
+  margin-left: auto;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.55;
+  font-size: 16px;
+  padding: 0;
+  line-height: 1;
+  border-radius: var(--radius-sm);
+  transition:
+    opacity    var(--duration-fast) var(--ease-fast),
+    background var(--duration-fast) var(--ease-fast);
+}
+
+.rule-banner-close:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+/* ── Responsive ────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .rule-selector-row { grid-template-columns: 1fr; }
+  .rule-form-grid    { grid-template-columns: 1fr; }
+}
