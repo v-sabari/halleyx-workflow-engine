@@ -4,6 +4,15 @@ A full-stack workflow automation system — design workflows, define rules, exec
 
 ---
 
+## Demo
+
+| Type | Link |
+|------|------|
+| YouTube Demo | [Watch on YouTube](https://your-youtube-link) |
+| Full Video (Drive) | [Watch on Google Drive](https://your-drive-link) |
+
+---
+
 ## Tech Stack
 
 | Layer    | Technology                             |
