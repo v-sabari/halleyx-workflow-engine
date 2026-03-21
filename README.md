@@ -8,8 +8,8 @@ A full-stack workflow automation system — design workflows, define rules, exec
 
 | Type | Link |
 |------|------|
-| YouTube Demo | [Watch on YouTube](https://your-youtube-link) |
-| Full Video (Drive) | [Watch on Google Drive](https://your-drive-link) |
+| YouTube Demo | [Watch on YouTube](https://youtu.be/sM3kVkuvGxk?si=l44yTJNasf0CfHli) |
+| Full Video (Drive) | [Watch on Google Drive](https://drive.google.com/file/d/1UMHyTbeDECdIgZzKOdkb8F3OycEGLWHD/view?usp=sharing) |
 
 ---
 
