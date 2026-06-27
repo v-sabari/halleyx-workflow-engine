@@ -15,7 +15,10 @@ public class CorsConfig {
             public void addCorsMappings(CorsRegistry registry) {
                 registry.addMapping("/**")
                         // Allow all localhost ports so Vite on :5173 or :5174 both work
-                        .allowedOriginPatterns("http://localhost:*")
+                        .allowedOriginPatterns(
+                                "http://localhost:*",
+                                "https://halleyx-workflow-engine.vercel.app"
+                        )
                         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
                         .allowedHeaders("*")
                         .allowCredentials(false)
