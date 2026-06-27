@@ -31,16 +31,29 @@ public class GlobalExceptionHandler {
     /** Business rule violations and not-found errors — return 400 */
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, Object>> handleRuntime(RuntimeException ex) {
-        log.error("Runtime error: {}", ex.getMessage(), ex);
-        return errorResponse(HttpStatus.BAD_REQUEST, ex.getMessage());
+
+        ex.printStackTrace();
+
+        log.error("Runtime error", ex);
+
+        return errorResponse(
+                HttpStatus.BAD_REQUEST,
+                ex.getClass().getName() + " : " + ex.getMessage()
+        );
     }
 
     /** Catch-all — return 500 without leaking internal details */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleException(Exception ex) {
-        log.error("Unexpected error: {}", ex.getMessage(), ex);
-        return errorResponse(HttpStatus.INTERNAL_SERVER_ERROR,
-                "An unexpected error occurred. Please try again.");
+
+        ex.printStackTrace();
+
+        log.error("Unexpected error", ex);
+
+        return errorResponse(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                ex.getClass().getName() + " : " + ex.getMessage()
+        );
     }
 
     private ResponseEntity<Map<String, Object>> errorResponse(
