@@ -11,7 +11,7 @@ function NotificationBell() {
   const fetchUnread = async () => {
     try {
       // NotificationController is at /notifications (no /api/v1 prefix)
-      const res = await fetch("http://localhost:8080/notifications/unread");
+      const res = await fetch("http://import.meta.env.VITE_API_URL/notifications/unread");
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
       setNotifications(data || []);
@@ -41,7 +41,7 @@ function NotificationBell() {
   const handleMarkAllRead = async () => {
     try {
       setLoading(true);
-      await fetch("http://localhost:8080/notifications/read-all", { method: "PUT" });
+      await fetch("http://import.meta.env.VITE_API_URL/notifications/read-all", { method: "PUT" });
       setNotifications([]);
       setOpen(false);
     } catch {
@@ -53,7 +53,7 @@ function NotificationBell() {
 
   const handleMarkOneRead = async (id) => {
     try {
-      await fetch(`http://localhost:8080/notifications/${id}/read`, { method: "PUT" });
+      await fetch(`http://import.meta.env.VITE_API_URL/notifications/${id}/read`, { method: "PUT" });
       setNotifications(prev => prev.filter(n => n.id !== id));
     } catch {
       console.error("Failed to dismiss notification");
