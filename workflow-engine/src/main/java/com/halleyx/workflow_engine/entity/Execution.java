@@ -37,7 +37,7 @@ public class Execution {
     @Column(nullable = false)
     private ExecutionStatus status;
 
-    /** Spec field: `data` — stored as JSON text. */
+    
     @Column(name = "input_data", columnDefinition = "TEXT")
     private String inputData;
 

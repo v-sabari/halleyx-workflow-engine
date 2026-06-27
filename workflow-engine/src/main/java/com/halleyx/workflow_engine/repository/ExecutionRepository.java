@@ -14,7 +14,7 @@ public interface ExecutionRepository extends JpaRepository<Execution, UUID> {
 
     List<Execution> findByWorkflowId(UUID workflowId);
 
-    /** Original — returns all executions with a given status (no pagination). */
+    
     List<Execution> findByStatus(ExecutionStatus status);
 
     /**
