@@ -1,10 +1,9 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "http://localhost:8080/api/v1",
-  headers: { "Content-Type": "application/json" },
-  timeout: 15000,
+  baseURL: import.meta.env.VITE_API_URL
 });
+export default api;
 
 // Response interceptor — unwrap nested data where backend returns
 // { workflow, steps, stepCount } for single workflow
