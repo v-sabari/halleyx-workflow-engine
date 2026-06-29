@@ -2,6 +2,7 @@ package com.halleyx.workflow_engine.service;
 
 import com.halleyx.workflow_engine.entity.Step;
 import com.halleyx.workflow_engine.entity.Workflow;
+import com.halleyx.workflow_engine.exception.ResourceNotFoundException;
 import com.halleyx.workflow_engine.repository.RuleRepository;
 import com.halleyx.workflow_engine.repository.StepRepository;
 import com.halleyx.workflow_engine.repository.WorkflowRepository;
@@ -19,6 +20,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * WorkflowService
+ *
+ * IMPROVEMENTS vs original:
+ * - SECURITY: uses ResourceNotFoundException (404) instead of returning null,
+ *   so callers never get a silent empty response on unknown IDs.
+ * - MAINTAINABILITY: getWorkflowById/updateWorkflow throw typed exception
+ *   instead of returning null and relying on controller null-checks.
+ * - CORRECTNESS: deleteWorkflow now throws 404 when workflow doesn't exist.
+ * - PERFORMANCE: toWorkflowMap remains the single place steps are fetched;
+ *   no N+1 risk added (each workflow page entry fetches its own steps once).
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -43,21 +56,18 @@ public class WorkflowService {
 
     // ── Read ──────────────────────────────────────────────────────────────────
 
+    /**
+     * Returns { workflow, steps, stepCount }.
+     * IMPROVEMENT: throws ResourceNotFoundException (404) instead of returning null.
+     */
     public Map<String, Object> getWorkflowById(UUID id) {
-        return workflowRepository.findById(id).map(workflow -> {
-            List<Step> steps = stepRepository
-                    .findByWorkflowIdOrderBySequenceOrderAsc(id);
-            Map<String, Object> result = new LinkedHashMap<>();
-            result.put("workflow",  workflow);
-            result.put("steps",     steps);
-            result.put("stepCount", steps.size());
-            return result;
-        }).orElse(null);
+        Workflow workflow = workflowRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Workflow", id));
+        return toWorkflowMap(workflow);
     }
 
     /**
-     * 3-param overload — called by tests (getAllWorkflows(page, size, search)).
-     * Delegates to the 4-param version with isActive=null.
+     * 3-param overload — called by unit tests.
      */
     public Page<Map<String, Object>> getAllWorkflows(int page, int size, String search) {
         return getAllWorkflows(page, size, search, null);
@@ -65,7 +75,6 @@ public class WorkflowService {
 
     /**
      * 4-param version with optional name search + isActive filter.
-     * FIX: isActive was received by controller but completely ignored before.
      */
     public Page<Map<String, Object>> getAllWorkflows(
             int page, int size, String search, Boolean isActive) {
@@ -73,10 +82,10 @@ public class WorkflowService {
         PageRequest pageable = PageRequest.of(
                 page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
 
-        Page<Workflow> workflowPage;
         boolean hasSearch = search   != null && !search.isBlank();
         boolean hasActive = isActive != null;
 
+        Page<Workflow> workflowPage;
         if (hasSearch && hasActive) {
             workflowPage = workflowRepository
                     .findByNameContainingIgnoreCaseAndIsActive(search, isActive, pageable);
@@ -95,27 +104,39 @@ public class WorkflowService {
 
     // ── Update ────────────────────────────────────────────────────────────────
 
+    /**
+     * IMPROVEMENT: throws ResourceNotFoundException instead of returning null.
+     */
     @Transactional
     public Workflow updateWorkflow(UUID id, Workflow updated) {
-        return workflowRepository.findById(id).map(existing -> {
-            existing.setName(updated.getName());
-            existing.setDescription(updated.getDescription());
-            existing.setInputSchema(updated.getInputSchema());
-            if (updated.getIsActive() != null) {
-                existing.setIsActive(updated.getIsActive());
-            }
-            existing.setVersion(existing.getVersion() + 1);
-            existing.setUpdatedAt(LocalDateTime.now());
-            Workflow saved = workflowRepository.save(existing);
-            log.info("Updated workflow id={} new version={}", saved.getId(), saved.getVersion());
-            return saved;
-        }).orElse(null);
+        Workflow existing = workflowRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Workflow", id));
+
+        existing.setName(updated.getName());
+        existing.setDescription(updated.getDescription());
+        existing.setInputSchema(updated.getInputSchema());
+        if (updated.getIsActive() != null) {
+            existing.setIsActive(updated.getIsActive());
+        }
+        existing.setVersion(existing.getVersion() + 1);
+        existing.setUpdatedAt(LocalDateTime.now());
+
+        Workflow saved = workflowRepository.save(existing);
+        log.info("Updated workflow id={} new version={}", saved.getId(), saved.getVersion());
+        return saved;
     }
 
     // ── Delete ────────────────────────────────────────────────────────────────
 
+    /**
+     * IMPROVEMENT: throws ResourceNotFoundException if workflow doesn't exist,
+     * preventing silent no-ops on bad IDs.
+     */
     @Transactional
     public void deleteWorkflow(UUID id) {
+        if (!workflowRepository.existsById(id)) {
+            throw new ResourceNotFoundException("Workflow", id);
+        }
         List<Step> steps = stepRepository.findByWorkflowId(id);
         steps.forEach(s -> ruleRepository.deleteByStepId(s.getId()));
         stepRepository.deleteByWorkflowId(id);

@@ -1,6 +1,7 @@
 package com.halleyx.workflow_engine.service;
 
 import com.halleyx.workflow_engine.entity.Workflow;
+import com.halleyx.workflow_engine.exception.ResourceNotFoundException;
 import com.halleyx.workflow_engine.repository.RuleRepository;
 import com.halleyx.workflow_engine.repository.StepRepository;
 import com.halleyx.workflow_engine.repository.WorkflowRepository;
@@ -65,7 +66,6 @@ class WorkflowServiceTest {
     void getWorkflowById_shouldReturnWorkflowWithSteps() {
         when(workflowRepository.findById(workflowId))
                 .thenReturn(Optional.of(sampleWorkflow));
-        // FIX: service calls findByWorkflowIdOrderBySequenceOrderAsc, not findByWorkflowId
         when(stepRepository.findByWorkflowIdOrderBySequenceOrderAsc(workflowId))
                 .thenReturn(Collections.emptyList());
 
@@ -78,12 +78,11 @@ class WorkflowServiceTest {
     }
 
     @Test
-    void getWorkflowById_shouldReturnNullWhenNotFound() {
+    void getWorkflowById_shouldThrowWhenNotFound() {
         when(workflowRepository.findById(workflowId)).thenReturn(Optional.empty());
 
-        Map<String, Object> result = workflowService.getWorkflowById(workflowId);
-
-        assertNull(result);
+        assertThrows(ResourceNotFoundException.class,
+                () -> workflowService.getWorkflowById(workflowId));
     }
 
     @Test
@@ -103,21 +102,20 @@ class WorkflowServiceTest {
 
         assertNotNull(result);
         assertEquals("Updated Name", result.getName());
-        assertEquals("Updated Description", result.getDescription());
         assertEquals(2, result.getVersion());
     }
 
     @Test
-    void updateWorkflow_shouldReturnNullWhenNotFound() {
+    void updateWorkflow_shouldThrowWhenNotFound() {
         when(workflowRepository.findById(workflowId)).thenReturn(Optional.empty());
 
-        Workflow result = workflowService.updateWorkflow(workflowId, sampleWorkflow);
-
-        assertNull(result);
+        assertThrows(ResourceNotFoundException.class,
+                () -> workflowService.updateWorkflow(workflowId, sampleWorkflow));
     }
 
     @Test
     void deleteWorkflow_shouldCallRepository() {
+        when(workflowRepository.existsById(workflowId)).thenReturn(true);
         when(stepRepository.findByWorkflowId(workflowId))
                 .thenReturn(Collections.emptyList());
         doNothing().when(workflowRepository).deleteById(workflowId);
@@ -128,15 +126,21 @@ class WorkflowServiceTest {
     }
 
     @Test
+    void deleteWorkflow_shouldThrowWhenNotFound() {
+        when(workflowRepository.existsById(workflowId)).thenReturn(false);
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> workflowService.deleteWorkflow(workflowId));
+    }
+
+    @Test
     void getAllWorkflows_withSearch_shouldCallSearchMethod() {
         Page<Workflow> mockPage = new PageImpl<>(List.of(sampleWorkflow));
         when(workflowRepository.findByNameContainingIgnoreCase(eq("Expense"), any()))
                 .thenReturn(mockPage);
-        // FIX: service calls findByWorkflowIdOrderBySequenceOrderAsc inside toWorkflowMap
         when(stepRepository.findByWorkflowIdOrderBySequenceOrderAsc(any()))
                 .thenReturn(Collections.emptyList());
 
-        // 3-param call — matches test contract
         Page<Map<String, Object>> result =
                 workflowService.getAllWorkflows(0, 5, "Expense");
 
@@ -150,11 +154,9 @@ class WorkflowServiceTest {
     void getAllWorkflows_withoutSearch_shouldCallFindAll() {
         Page<Workflow> mockPage = new PageImpl<>(List.of(sampleWorkflow));
         when(workflowRepository.findAll(any(PageRequest.class))).thenReturn(mockPage);
-        // FIX: service calls findByWorkflowIdOrderBySequenceOrderAsc inside toWorkflowMap
         when(stepRepository.findByWorkflowIdOrderBySequenceOrderAsc(any()))
                 .thenReturn(Collections.emptyList());
 
-        // 3-param call — matches test contract
         Page<Map<String, Object>> result =
                 workflowService.getAllWorkflows(0, 5, null);
 

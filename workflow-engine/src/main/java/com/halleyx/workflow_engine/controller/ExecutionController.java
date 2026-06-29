@@ -20,21 +20,15 @@ import java.util.UUID;
 /**
  * ExecutionController
  *
- * B3 FIX — GET /api/v1/executions/{id}/logs added.
- *   WorkflowExecution.jsx calls this to populate the step-logs table.
- *   Returns List<ExecutionLog> ordered startedAt ASC (execution order).
- *
- * B6 FIX — @CrossOrigin added.
- *   Original controller lacked it; all other controllers had it.
- *   CorsConfig bean covers all routes globally, but explicit annotation
- *   guards against future Spring Security config overriding the CORS filter.
- *
- * GET /api/v1/executions (paginated) — required by AuditLog.jsx (F2 fix).
+ * IMPROVEMENTS vs original:
+ * - start() validates workflowId is non-null before calling service.
+ * - status filter sanitised (IllegalArgumentException → 400 via handler).
+ * - @RequiredArgsConstructor used throughout.
  */
 @RestController
 @RequestMapping("/api/v1/executions")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "http://localhost:5173")
+@CrossOrigin(origins = "*")
 public class ExecutionController {
 
     private final ExecutionService       executionService;
@@ -47,18 +41,23 @@ public class ExecutionController {
      */
     @PostMapping("/start")
     public ResponseEntity<Execution> start(@RequestBody Map<String, Object> body) {
-        UUID workflowId = UUID.fromString((String) body.get("workflowId"));
+        String workflowIdStr = (String) body.get("workflowId");
+        if (workflowIdStr == null || workflowIdStr.isBlank()) {
+            throw new IllegalArgumentException("workflowId is required");
+        }
+        UUID workflowId = UUID.fromString(workflowIdStr);
+
         @SuppressWarnings("unchecked")
         Map<String, Object> input =
                 (Map<String, Object>) body.getOrDefault("input", Map.of());
         String startedBy = (String) body.getOrDefault("startedBy", "system");
+
         return ResponseEntity.ok(
                 executionService.startExecution(workflowId, input, startedBy));
     }
 
     /**
      * GET /api/v1/executions?page=0&size=10&status=FAILED
-     * Paginated execution list — AuditLog page primary data source.
      */
     @GetMapping
     public ResponseEntity<Page<Execution>> list(
@@ -66,67 +65,46 @@ public class ExecutionController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false)    String status) {
 
-        PageRequest pr = PageRequest.of(
-                page, size,
+        PageRequest pr = PageRequest.of(page, size,
                 Sort.by(Sort.Direction.DESC, "startedAt"));
 
         Page<Execution> result;
         if (status != null && !status.isBlank()) {
-            try {
-                result = executionRepository.findByStatus(
-                        ExecutionStatus.valueOf(status.toUpperCase()), pr);
-            } catch (IllegalArgumentException e) {
-                result = Page.empty(pr);
-            }
+            // Throws IllegalArgumentException on bad enum value → 400 via handler
+            ExecutionStatus es = ExecutionStatus.valueOf(status.toUpperCase());
+            result = executionRepository.findByStatus(es, pr);
         } else {
             result = executionRepository.findAll(pr);
         }
         return ResponseEntity.ok(result);
     }
 
-    /**
-     * GET /api/v1/executions/{id}
-     */
+    /** GET /api/v1/executions/{id} */
     @GetMapping("/{id}")
     public ResponseEntity<Execution> status(@PathVariable UUID id) {
         return ResponseEntity.ok(executionService.getExecutionStatus(id));
     }
 
-    /**
-     * GET /api/v1/executions/{id}/logs   — B3 FIX
-     *
-     * Returns all ExecutionLog rows for this execution, ordered startedAt ASC.
-     * WorkflowExecution.jsx calls this URL for the step-logs table.
-     * AuditLog.jsx drill-down also uses this for the sub-table.
-     */
+    /** GET /api/v1/executions/{id}/logs */
     @GetMapping("/{id}/logs")
     public ResponseEntity<List<ExecutionLog>> logs(@PathVariable UUID id) {
-        List<ExecutionLog> logList =
-                executionLogRepository.findByExecutionIdOrderByStartedAtAsc(id);
-        return ResponseEntity.ok(logList);
+        return ResponseEntity.ok(
+                executionLogRepository.findByExecutionIdOrderByStartedAtAsc(id));
     }
 
-    /**
-     * POST /api/v1/executions/{id}/cancel
-     */
+    /** POST /api/v1/executions/{id}/cancel */
     @PostMapping("/{id}/cancel")
     public ResponseEntity<Execution> cancel(@PathVariable UUID id) {
         return ResponseEntity.ok(executionService.cancelExecution(id));
     }
 
-    /**
-     * POST /api/v1/executions/{id}/retry
-     * Retries only the failed step — not the entire workflow (spec requirement).
-     */
+    /** POST /api/v1/executions/{id}/retry */
     @PostMapping("/{id}/retry")
     public ResponseEntity<Execution> retry(@PathVariable UUID id) {
         return ResponseEntity.ok(executionService.retryFailedStep(id));
     }
 
-    /**
-     * POST /api/v1/executions/{id}/approve
-     * Body: { "approverEmail": "manager@example.com" }
-     */
+    /** POST /api/v1/executions/{id}/approve */
     @PostMapping("/{id}/approve")
     public ResponseEntity<Execution> approve(
             @PathVariable UUID id,
@@ -135,10 +113,7 @@ public class ExecutionController {
         return ResponseEntity.ok(executionService.approveStep(id, approverEmail));
     }
 
-    /**
-     * POST /api/v1/executions/{id}/reject
-     * Body: { "reason": "..." }
-     */
+    /** POST /api/v1/executions/{id}/reject */
     @PostMapping("/{id}/reject")
     public ResponseEntity<Execution> reject(
             @PathVariable UUID id,

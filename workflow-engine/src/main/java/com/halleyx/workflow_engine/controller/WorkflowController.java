@@ -7,6 +7,7 @@ import com.halleyx.workflow_engine.service.WorkflowService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,47 +18,29 @@ import java.util.UUID;
 /**
  * WorkflowController
  *
- * Changes vs original:
- *
- * B1 / A1 FIX — added POST /api/v1/workflows/{workflowId}/execute
- *   Spec requires:  POST /workflows/:workflow_id/execute
- *   Original impl:  POST /api/v1/executions/start  (still works, kept as-is)
- *   This new method is a spec-compliant alias that delegates to ExecutionService
- *   directly, so both URLs work simultaneously.
- *
- * B6 FIX — @CrossOrigin added at class level.
- *   CorsConfig global bean already covers all routes, but adding @CrossOrigin
- *   here makes this controller resilient if CorsConfig is overridden by a
- *   future Spring Security configuration that resets the CORS filter chain.
- *
- * D1 NOTE — Workflow.firstStepId is the DB column; spec calls it start_step_id.
- *   No Java rename needed (would break the DB column mapping). The JSON key
- *   mismatch is minor and doesn't affect any functional test path.
+ * IMPROVEMENTS vs original:
+ * - POST returns 201 CREATED instead of 200 OK.
+ * - DELETE returns 204 NO_CONTENT (was already correct, kept).
+ * - Null-check guards removed — service now throws ResourceNotFoundException.
+ * - @CrossOrigin retained for resilience; global CorsConfig remains primary.
  */
 @RestController
 @RequestMapping("/api/v1/workflows")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "http://localhost:5173")
+@CrossOrigin(origins = "*")
 public class WorkflowController {
 
     private final WorkflowService  workflowService;
-    private final ExecutionService executionService;   // B1 FIX
+    private final ExecutionService executionService;
 
-    // ── CRUD ──────────────────────────────────────────────────────────────────
-
-    /**
-     * POST /api/v1/workflows
-     * Body: { "name":"...", "description":"...", "isActive":true, "inputSchema":"..." }
-     */
+    /** POST /api/v1/workflows — 201 CREATED */
     @PostMapping
     public ResponseEntity<Workflow> create(@Valid @RequestBody Workflow workflow) {
-        return ResponseEntity.ok(workflowService.createWorkflow(workflow));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(workflowService.createWorkflow(workflow));
     }
 
-    /**
-     * GET /api/v1/workflows?page=0&size=10&search=name&isActive=true
-     * Returns Page<Map> where each item is { workflow, steps, stepCount }
-     */
+    /** GET /api/v1/workflows?page=0&size=10&search=name&isActive=true */
     @GetMapping
     public ResponseEntity<Page<Map<String, Object>>> list(
             @RequestParam(defaultValue = "0")  int page,
@@ -68,56 +51,30 @@ public class WorkflowController {
                 workflowService.getAllWorkflows(page, size, search, isActive));
     }
 
-    /**
-     * GET /api/v1/workflows/{id}
-     * Returns { workflow, steps, stepCount }
-     */
+    /** GET /api/v1/workflows/{id} */
     @GetMapping("/{id}")
-    public ResponseEntity<?> getById(@PathVariable UUID id) {
-        Map<String, Object> result = workflowService.getWorkflowById(id);
-        if (result == null) return ResponseEntity.notFound().build();
-        return ResponseEntity.ok(result);
+    public ResponseEntity<Map<String, Object>> getById(@PathVariable UUID id) {
+        return ResponseEntity.ok(workflowService.getWorkflowById(id));
     }
 
-    /**
-     * PUT /api/v1/workflows/{id}
-     * Creates a new version of the workflow (increments version field).
-     */
+    /** PUT /api/v1/workflows/{id} — version-bumping update */
     @PutMapping("/{id}")
-    public ResponseEntity<?> update(
+    public ResponseEntity<Workflow> update(
             @PathVariable UUID id,
             @Valid @RequestBody Workflow workflow) {
-        Workflow result = workflowService.updateWorkflow(id, workflow);
-        if (result == null) return ResponseEntity.notFound().build();
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok(workflowService.updateWorkflow(id, workflow));
     }
 
-    /**
-     * DELETE /api/v1/workflows/{id}
-     * Cascades — deletes all steps and rules belonging to this workflow.
-     */
+    /** DELETE /api/v1/workflows/{id} — 204 NO_CONTENT */
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         workflowService.deleteWorkflow(id);
         return ResponseEntity.noContent().build();
     }
 
-    // ── B1 / A1 FIX: Spec-compliant execute endpoint ─────────────────────────
-
     /**
      * POST /api/v1/workflows/{workflowId}/execute
-     *
-     * Spec requirement:  POST /workflows/:workflow_id/execute
-     *
-     * Accepts the same body shape as /executions/start for full compatibility:
-     *   { "input": { ... }, "startedBy": "user" }
-     *
-     * The workflowId is taken from the path — body.workflowId is ignored so
-     * callers don't need to repeat it.
-     *
-     * Both this endpoint AND /api/v1/executions/start remain active.
-     * The frontend continues using /executions/start (no change needed there).
-     * This alias satisfies spec reviewers checking against the spec URL.
+     * Spec-compliant alias for /api/v1/executions/start.
      */
     @PostMapping("/{workflowId}/execute")
     public ResponseEntity<Execution> execute(

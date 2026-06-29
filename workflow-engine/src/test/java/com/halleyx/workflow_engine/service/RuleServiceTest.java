@@ -1,7 +1,9 @@
 package com.halleyx.workflow_engine.service;
 
 import com.halleyx.workflow_engine.entity.Rule;
+import com.halleyx.workflow_engine.exception.ResourceNotFoundException;
 import com.halleyx.workflow_engine.repository.RuleRepository;
+import com.halleyx.workflow_engine.repository.StepRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,15 +22,15 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class RuleServiceTest {
 
-    @Mock
-    private RuleRepository ruleRepository;
+    @Mock private RuleRepository  ruleRepository;
+    @Mock private StepRepository  stepRepository;
 
     @InjectMocks
     private RuleService ruleService;
 
-    private Rule sampleRule;
-    private UUID ruleId;
-    private UUID stepId;
+    private Rule   sampleRule;
+    private UUID   ruleId;
+    private UUID   stepId;
 
     @BeforeEach
     void setUp() {
@@ -45,6 +47,7 @@ class RuleServiceTest {
 
     @Test
     void createRule_shouldSaveAndReturnRule() {
+        when(stepRepository.existsById(stepId)).thenReturn(true);
         when(ruleRepository.save(any(Rule.class))).thenReturn(sampleRule);
 
         Rule result = ruleService.createRule(sampleRule);
@@ -56,6 +59,7 @@ class RuleServiceTest {
 
     @Test
     void createRule_shouldSetTimestamps() {
+        when(stepRepository.existsById(stepId)).thenReturn(true);
         when(ruleRepository.save(any(Rule.class))).thenAnswer(i -> i.getArgument(0));
 
         Rule result = ruleService.createRule(sampleRule);
@@ -65,7 +69,16 @@ class RuleServiceTest {
     }
 
     @Test
+    void createRule_shouldThrowWhenStepNotFound() {
+        when(stepRepository.existsById(stepId)).thenReturn(false);
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> ruleService.createRule(sampleRule));
+    }
+
+    @Test
     void getRulesByStep_shouldReturnSortedByPriority() {
+        when(stepRepository.existsById(stepId)).thenReturn(true);
         Rule rule1 = new Rule(); rule1.setPriority(2);
         Rule rule2 = new Rule(); rule2.setPriority(1);
         when(ruleRepository.findByStepIdOrderByPriorityAsc(stepId))
@@ -98,18 +111,25 @@ class RuleServiceTest {
     void updateRule_shouldThrowWhenRuleNotFound() {
         when(ruleRepository.findById(ruleId)).thenReturn(Optional.empty());
 
-        RuntimeException ex = assertThrows(RuntimeException.class,
+        assertThrows(ResourceNotFoundException.class,
                 () -> ruleService.updateRule(ruleId, sampleRule));
-
-        assertTrue(ex.getMessage().contains("Rule not found"));
     }
 
     @Test
     void deleteRule_shouldCallRepository() {
+        when(ruleRepository.existsById(ruleId)).thenReturn(true);
         doNothing().when(ruleRepository).deleteById(ruleId);
 
         ruleService.deleteRule(ruleId);
 
         verify(ruleRepository, times(1)).deleteById(ruleId);
+    }
+
+    @Test
+    void deleteRule_shouldThrowWhenRuleNotFound() {
+        when(ruleRepository.existsById(ruleId)).thenReturn(false);
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> ruleService.deleteRule(ruleId));
     }
 }
