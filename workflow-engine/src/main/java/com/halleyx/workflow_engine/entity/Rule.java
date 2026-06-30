@@ -5,11 +5,29 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
+
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+/**
+ * Rule entity.
+ *
+ * INDEX additions:
+ *
+ *   idx_rules_step_id              — findByStepId* queries (most common path)
+ *   idx_rules_step_priority        — composite: findByStepIdOrderByPriorityAsc
+ *                                    eliminates filesort on rule evaluation
+ */
 @Entity
-@Table(name = "rules")
+@Table(
+    name = "rules",
+    indexes = {
+        @Index(name = "idx_rules_step_id",
+               columnList = "step_id"),
+        @Index(name = "idx_rules_step_priority",
+               columnList = "step_id, priority")
+    }
+)
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Rule {
 
@@ -20,12 +38,6 @@ public class Rule {
     @Column(name = "step_id", nullable = false)
     private UUID stepId;
 
-    /**
-     * The rule condition expression.
-     * Column name in DB is "rule_condition".
-     * Java field name is "condition" (avoids SQL reserved-word clash).
-     * Frontend sends JSON key: "condition".
-     */
     @NotBlank(message = "Rule condition is required")
     @Column(name = "rule_condition", columnDefinition = "TEXT", nullable = false)
     private String condition;

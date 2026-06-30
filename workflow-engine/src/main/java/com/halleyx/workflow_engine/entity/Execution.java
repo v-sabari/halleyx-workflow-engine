@@ -1,25 +1,37 @@
 package com.halleyx.workflow_engine.entity;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.*;
+
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
  * Execution entity.
  *
- * Changes vs original:
- * B5 — removed dead `executionLogs` TEXT column (never written to; logs live
- *      in the execution_logs table and are fetched via /executions/:id/logs).
- * D2 — `completedAt` kept as the DB column name (migration-safe) but
- *      @JsonProperty("ended_at") added so the JSON response matches the spec
- *      field name `ended_at` without altering the database schema.
- * B6 — @CrossOrigin added at class level as a safety net alongside CorsConfig.
+ * INDEX additions (all queries that filter on these columns are now O(log n)):
+ *
+ *   idx_executions_workflow_id   — GET /executions?workflowId=... and
+ *                                  WorkflowService.toWorkflowMap (N+1 guard)
+ *   idx_executions_status        — GET /executions?status=FAILED (frequent filter)
+ *   idx_executions_started_at    — default sort column on all list queries
+ *   idx_executions_started_by    — future audit queries "all executions by user X"
+ *
+ * No field renames. @Table updated to add the indexes[] attribute.
+ * spring.jpa.hibernate.ddl-auto=update will emit the ALTER TABLE … ADD INDEX
+ * statements on next startup if the indexes do not yet exist.
  */
 @Entity
-@Table(name = "executions")
+@Table(
+    name = "executions",
+    indexes = {
+        @Index(name = "idx_executions_workflow_id", columnList = "workflow_id"),
+        @Index(name = "idx_executions_status",      columnList = "status"),
+        @Index(name = "idx_executions_started_at",  columnList = "started_at"),
+        @Index(name = "idx_executions_started_by",  columnList = "started_by")
+    }
+)
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Execution {
 
@@ -37,52 +49,24 @@ public class Execution {
     @Column(nullable = false)
     private ExecutionStatus status;
 
-    /** Spec field: `data` — stored as JSON text. */
     @Column(name = "input_data", columnDefinition = "TEXT")
     private String inputData;
-
-    /**
-     * B5 FIX: removed executionLogs TEXT column — it was never written to.
-     * Step-level logs are persisted as ExecutionLog rows and served via
-     * GET /api/v1/executions/{id}/logs.
-     * If you need to keep the column for migration compatibility, simply
-     * re-add:  @Column(name = "execution_logs", columnDefinition = "LONGTEXT")
-     * private String executionLogs;
-     */
 
     @Column(name = "current_step_id")
     private UUID currentStepId;
 
-    /**
-     * FIX: @Builder.Default ensures Lombok's builder respects the "= 0"
-     * initializer. Without it, builder().build() produces retryCount = null,
-     * causing NPE on increment (getRetryCount() + 1).
-     *
-     * Spec field name: `retries` — exposed via @JsonProperty.
-     */
     @Builder.Default
     @Column(name = "retry_count", nullable = false)
     @JsonProperty("retries")
     private Integer retryCount = 0;
 
-    /**
-     * Spec field: `triggered_by` — stored as startedBy internally.
-     * D2 FIX: @JsonProperty aligns JSON output with spec without a DB migration.
-     */
     @Column(name = "started_by")
-    
     private String startedBy;
 
     @Column(name = "started_at")
     private LocalDateTime startedAt;
 
-    /**
-     * D2 FIX: spec calls this field `ended_at`.
-     * DB column stays `completed_at` (no migration needed).
-     * @JsonProperty maps it to `ended_at` in all JSON responses.
-     */
     @Column(name = "completed_at")
-    
     private LocalDateTime completedAt;
 
     @Column(name = "updated_at")

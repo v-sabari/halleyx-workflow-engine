@@ -2,6 +2,7 @@ package com.halleyx.workflow_engine.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
@@ -17,11 +18,17 @@ import java.util.Map;
  *     "defaultValue": "..."   (optional)
  *   }
  * }
+ *
+ * FIX: objectMapper is now the shared Spring-managed bean (constructor-injected)
+ * instead of a locally created `new ObjectMapper()`. This avoids allocating a
+ * second mapper instance per service bean and keeps schema parsing consistent
+ * with the rest of the application (same module registrations).
  */
 @Service
+@RequiredArgsConstructor
 public class InputSchemaValidatorService {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     /**
      * Validates {@code input} against {@code schema}.

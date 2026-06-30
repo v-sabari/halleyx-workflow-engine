@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -18,17 +19,17 @@ import java.util.UUID;
 /**
  * WorkflowController
  *
- * IMPROVEMENTS vs original:
- * - POST returns 201 CREATED instead of 200 OK.
- * - DELETE returns 204 NO_CONTENT (was already correct, kept).
- * - Null-check guards removed — service now throws ResourceNotFoundException.
- * - @CrossOrigin retained for resilience; global CorsConfig remains primary.
+ * All endpoints are protected by the API key filter (SecurityConfig).
+ * The /{workflowId}/execute alias passes the Idempotency-Key header through
+ * to ExecutionService so callers can also use idempotency on this route.
  */
 @RestController
 @RequestMapping("/api/v1/workflows")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
 public class WorkflowController {
+
+    private static final String IDEMPOTENCY_HEADER = "Idempotency-Key";
 
     private final WorkflowService  workflowService;
     private final ExecutionService executionService;
@@ -57,7 +58,7 @@ public class WorkflowController {
         return ResponseEntity.ok(workflowService.getWorkflowById(id));
     }
 
-    /** PUT /api/v1/workflows/{id} — version-bumping update */
+    /** PUT /api/v1/workflows/{id} */
     @PutMapping("/{id}")
     public ResponseEntity<Workflow> update(
             @PathVariable UUID id,
@@ -74,25 +75,29 @@ public class WorkflowController {
 
     /**
      * POST /api/v1/workflows/{workflowId}/execute
-     * Spec-compliant alias for /api/v1/executions/start.
+     * Convenience alias — also supports Idempotency-Key and authenticated principal.
      */
     @PostMapping("/{workflowId}/execute")
     public ResponseEntity<Execution> execute(
             @PathVariable UUID workflowId,
-            @RequestBody(required = false) Map<String, Object> body) {
+            @RequestHeader(value = IDEMPOTENCY_HEADER, required = false) String idempotencyKey,
+            @RequestBody(required = false) Map<String, Object> body,
+            Authentication authentication) {
 
         if (body == null) body = new HashMap<>();
 
         @SuppressWarnings("unchecked")
-        Map<String, Object> input = body.containsKey("input")
+        Map<String, Object> input = body.containsKey("input") && body.get("input") instanceof Map
                 ? (Map<String, Object>) body.get("input")
                 : new HashMap<>();
 
         String startedBy = body.containsKey("startedBy")
                 ? String.valueOf(body.get("startedBy"))
-                : "system";
+                : (authentication != null
+                        ? String.valueOf(authentication.getPrincipal())
+                        : "system");
 
         return ResponseEntity.ok(
-                executionService.startExecution(workflowId, input, startedBy));
+                executionService.startExecution(workflowId, input, startedBy, idempotencyKey));
     }
 }

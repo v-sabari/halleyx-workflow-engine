@@ -2,20 +2,43 @@ package com.halleyx.workflow_engine.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
  * ExecutionLog entity — one row per step execution.
  *
- * Changes vs original:
- * B4 FIX — added `approverId` field.
- *   Spec step log example includes "approver_id": "user-001".
- *   This field is populated by ExecutionService.approveStep()
- *   via the overloaded writeExecutionLog(..., approverId) call.
+ * INDEX additions:
+ *
+ *   idx_exec_logs_execution_id   — GET /executions/{id}/logs (primary lookup)
+ *   idx_exec_logs_step_id        — used by findTopByExecutionIdAndStepIdAndStatus…
+ *   idx_exec_logs_status         — AuditLogController filter on status
+ *   idx_exec_logs_step_type      — AuditLogController filter on stepType
+ *   idx_exec_logs_started_at     — AuditLogController date-range filter + sort
+ *
+ * Composite index on (execution_id, step_id, status) supports the approval log
+ * lookup: findTopByExecutionIdAndStepIdAndStatusOrderByStartedAtDesc.
  */
 @Entity
-@Table(name = "execution_logs")
+@Table(
+    name = "execution_logs",
+    indexes = {
+        @Index(name = "idx_exec_logs_execution_id",
+               columnList = "execution_id"),
+        @Index(name = "idx_exec_logs_step_id",
+               columnList = "step_id"),
+        @Index(name = "idx_exec_logs_status",
+               columnList = "status"),
+        @Index(name = "idx_exec_logs_step_type",
+               columnList = "step_type"),
+        @Index(name = "idx_exec_logs_started_at",
+               columnList = "started_at"),
+        // Composite: drives findTopByExecutionIdAndStepIdAndStatus…
+        @Index(name = "idx_exec_logs_exec_step_status",
+               columnList = "execution_id, step_id, status")
+    }
+)
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class ExecutionLog {
 
@@ -43,11 +66,6 @@ public class ExecutionLog {
 
     private String status;
 
-    /**
-     * B4 FIX: approver_id — set when an APPROVAL step is approved.
-     * Spec step log example: "approver_id": "user-001"
-     * In practice this holds the approverEmail passed to approveStep().
-     */
     @Column(name = "approver_id")
     private String approverId;
 

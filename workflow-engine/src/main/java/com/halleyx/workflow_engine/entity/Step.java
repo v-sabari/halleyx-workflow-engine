@@ -4,11 +4,30 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
+
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+/**
+ * Step entity.
+ *
+ * INDEX additions:
+ *
+ *   idx_steps_workflow_id          — findByWorkflowId* queries (most common)
+ *   idx_steps_workflow_seq         — composite: findByWorkflowIdOrderBySequenceOrderAsc
+ *                                    (the full order-by index avoids a filesort)
+ *   idx_steps_step_type            — future: filter steps by type
+ */
 @Entity
-@Table(name = "steps")
+@Table(
+    name = "steps",
+    indexes = {
+        @Index(name = "idx_steps_workflow_id",
+               columnList = "workflow_id"),
+        @Index(name = "idx_steps_workflow_seq",
+               columnList = "workflow_id, sequence_order")
+    }
+)
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Step {
 
@@ -32,10 +51,6 @@ public class Step {
     @Column(name = "sequence_order", nullable = false)
     private Integer sequenceOrder;
 
-    /**
-     * JSON configuration: assignee_email, notification_channel,
-     * template, subject, retry_limit
-     */
     @Column(columnDefinition = "TEXT")
     private String configuration;
 

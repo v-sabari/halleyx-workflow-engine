@@ -1,5 +1,6 @@
 package com.halleyx.workflow_engine.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -14,7 +15,9 @@ class InputSchemaValidatorServiceTest {
 
     @BeforeEach
     void setUp() {
-        validatorService = new InputSchemaValidatorService();
+        // ObjectMapper is now constructor-injected (was new ObjectMapper() field);
+        // pass a plain instance here since no date/time fields are exercised in these tests.
+        validatorService = new InputSchemaValidatorService(new ObjectMapper());
     }
 
     @Test

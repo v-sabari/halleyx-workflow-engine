@@ -1,30 +1,36 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+             https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
+    <!-- ── Parent ─────────────────────────────────────────────────────────── -->
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.4.4</version>
+        <version>3.3.4</version>
         <relativePath/>
     </parent>
 
+    <!-- ── Coordinates ───────────────────────────────────────────────────── -->
     <groupId>com.halleyx</groupId>
     <artifactId>workflow-engine</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
     <name>workflow-engine</name>
-    <description>Halleyx Workflow Engine — Full Stack Engineer Challenge 2026</description>
+    <description>Production-grade rule-driven workflow engine</description>
 
+    <!-- ── Properties ────────────────────────────────────────────────────── -->
     <properties>
         <java.version>21</java.version>
-        <maven.compiler.release>21</maven.compiler.release>
-        <lombok.version>1.18.44</lombok.version>
+        <bucket4j.version>8.10.1</bucket4j.version>
     </properties>
 
+    <!-- ── Dependencies ──────────────────────────────────────────────────── -->
     <dependencies>
+
+        <!-- ── Spring Boot starters ─────────────────────────────────────── -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
@@ -45,29 +51,61 @@
             <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
 
+        <!--
+            Spring Security — provides the filter chain, SecurityContext,
+            UsernamePasswordAuthenticationToken, and the @EnableWebSecurity DSL.
+            Required by SecurityConfig and ApiKeyAuthenticationFilter.
+        -->
         <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
 
+        <!--
+            Actuator — exposes /actuator/health for load-balancer probes.
+            Only the health endpoint is exposed (see application.properties).
+        -->
         <dependency>
-            <groupId>com.fasterxml.jackson.datatype</groupId>
-            <artifactId>jackson-datatype-jsr310</artifactId>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
+        <!-- ── Database ─────────────────────────────────────────────────── -->
         <dependency>
             <groupId>com.mysql</groupId>
             <artifactId>mysql-connector-j</artifactId>
             <scope>runtime</scope>
         </dependency>
 
+        <!-- ── Rate limiting ─────────────────────────────────────────────── -->
+        <!--
+            Bucket4j core (no Hazelcast/Redis extensions needed for in-JVM
+            ConcurrentHashMap-backed buckets used in RateLimitFilter).
+        -->
+        <dependency>
+            <groupId>com.bucket4j</groupId>
+            <artifactId>bucket4j-core</artifactId>
+            <version>${bucket4j.version}</version>
+        </dependency>
+
+        <!-- ── Jackson Java 8 date/time ─────────────────────────────────── -->
+        <!--
+            Registered in RestClientConfig so LocalDateTime serialises as
+            ISO-8601 strings rather than numeric arrays.
+        -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
+
+        <!-- ── Lombok ────────────────────────────────────────────────────── -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>${lombok.version}</version>
-            <scope>provided</scope>
+            <optional>true</optional>
         </dependency>
 
+        <!-- ── Test ──────────────────────────────────────────────────────── -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
@@ -75,20 +113,51 @@
         </dependency>
 
         <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            H2 in-memory database — used only by application-test.properties
+            for the @SpringBootTest context load test. NOT on the runtime
+            classpath in production (scope=test).
+        -->
+        <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>test</scope>
         </dependency>
+
     </dependencies>
 
+    <!-- ── Build ─────────────────────────────────────────────────────────── -->
     <build>
         <plugins>
+
+            <!-- Spring Boot executable JAR -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <!-- Strip Lombok from the repackaged JAR (annotation-only at compile time) -->
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+
+            <!-- Enforce Java 21 source/target -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.14.1</version>
                 <configuration>
-                    <release>${maven.compiler.release}</release>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                    <!-- Lombok annotation processor -->
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
@@ -99,27 +168,6 @@
                 </configuration>
             </plugin>
 
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-                <configuration>
-                    <excludes>
-                        <exclude>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok</artifactId>
-                        </exclude>
-                    </excludes>
-                </configuration>
-            </plugin>
-
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <configuration>
-                    <useModulePath>false</useModulePath>
-                    <argLine>-XX:+EnableDynamicAgentLoading</argLine>
-                </configuration>
-            </plugin>
         </plugins>
     </build>
 

@@ -10,6 +10,8 @@ import com.halleyx.workflow_engine.entity.Step;
 import com.halleyx.workflow_engine.entity.Workflow;
 import com.halleyx.workflow_engine.exception.BusinessException;
 import com.halleyx.workflow_engine.exception.ResourceNotFoundException;
+import com.halleyx.workflow_engine.idempotency.IdempotencyRecord;
+import com.halleyx.workflow_engine.idempotency.IdempotencyService;
 import com.halleyx.workflow_engine.repository.ExecutionLogRepository;
 import com.halleyx.workflow_engine.repository.ExecutionRepository;
 import com.halleyx.workflow_engine.repository.RuleRepository;
@@ -30,42 +32,69 @@ import java.util.UUID;
 /**
  * ExecutionService
  *
- * IMPROVEMENTS vs original:
- * SECURITY:
- *   - requireExecution/requireStep throw ResourceNotFoundException (404) not RuntimeException.
- *   - Business rule violations throw BusinessException (400) not RuntimeException.
- *   - No internal details leaked — exceptions carry only caller-safe messages.
+ * Handles the full lifecycle of a workflow execution:
+ * start → step-by-step engine → approve/reject/retry/cancel.
  *
- * CORRECTNESS:
- *   - startExecution validates workflowId exists before proceeding.
- *   - retryFailedStep checks currentStepId is set before calling requireStep.
- *   - cancelExecution uses BusinessException for state violation.
+ * Key additions:
+ *  IDEMPOTENCY: startExecution() accepts an optional idempotency key.
+ *    - First call  → run normally, cache result.
+ *    - Duplicate   → replay cached Execution without re-running the workflow.
+ *    - In-flight   → 409 Conflict (another thread is already processing it).
  *
- * MAINTAINABILITY:
- *   - serialize() uses the Spring-managed ObjectMapper bean (ISO-8601 dates).
- *   - ObjectMapper injected via constructor, not created as a field (avoids JavaTimeModule miss).
+ *  ASYNC: runStepsFrom() is called synchronously for TASK / NOTIFICATION steps,
+ *    but the method signature is preserved for the async wrapper in AsyncExecutionService.
+ *    See AsyncExecutionService for the @Async override used by ExecutionController.
  */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class ExecutionService {
 
-    private final ExecutionRepository        executionRepository;
-    private final WorkflowRepository         workflowRepository;
-    private final StepRepository             stepRepository;
-    private final RuleRepository             ruleRepository;
-    private final ExecutionLogRepository     executionLogRepository;
-    private final RuleEvaluationService      ruleEvaluationService;
+    private static final String START_PATH = "POST /api/v1/executions/start";
+
+    private final ExecutionRepository         executionRepository;
+    private final WorkflowRepository          workflowRepository;
+    private final StepRepository              stepRepository;
+    private final RuleRepository              ruleRepository;
+    private final ExecutionLogRepository      executionLogRepository;
+    private final RuleEvaluationService       ruleEvaluationService;
     private final InputSchemaValidatorService validatorService;
-    private final NotificationService        notificationService;
-    private final ObjectMapper               objectMapper;   // Spring-managed bean (JavaTimeModule registered)
+    private final NotificationService         notificationService;
+    private final IdempotencyService          idempotencyService;
+    private final ObjectMapper                objectMapper;
 
     // ── Public API ────────────────────────────────────────────────────────────
 
+    /**
+     * Starts a new execution of {@code workflowId}.
+     *
+     * @param workflowId      the target workflow
+     * @param input           caller-supplied input data
+     * @param startedBy       caller identity (from API key description or explicit field)
+     * @param idempotencyKey  optional; supply to make the call idempotent.
+     *                        Null / blank → no idempotency check.
+     */
     @Transactional
     public Execution startExecution(UUID workflowId,
                                     Map<String, Object> input,
-                                    String startedBy) {
+                                    String startedBy,
+                                    String idempotencyKey) {
+
+        // ── Idempotency check ─────────────────────────────────────────────────
+        boolean hasKey = idempotencyKey != null && !idempotencyKey.isBlank();
+
+        if (hasKey) {
+            Optional<IdempotencyRecord> existing =
+                    idempotencyService.findExisting(idempotencyKey, START_PATH);
+            if (existing.isPresent()) {
+                return idempotencyService.replayOrReject(existing.get(), Execution.class);
+            }
+            // Not seen before — mark in-flight (separate transaction so concurrent
+            // duplicates find this record immediately).
+            idempotencyService.markProcessing(idempotencyKey, START_PATH);
+        }
+
+        // ── Core start logic ──────────────────────────────────────────────────
         Workflow workflow = workflowRepository.findById(workflowId)
                 .orElseThrow(() -> new ResourceNotFoundException("Workflow", workflowId));
 
@@ -75,7 +104,8 @@ public class ExecutionService {
 
         validatorService.validate(workflow.getInputSchema(), input);
 
-        List<Step> allSteps = stepRepository.findByWorkflowIdOrderBySequenceOrderAsc(workflowId);
+        List<Step> allSteps =
+                stepRepository.findByWorkflowIdOrderBySequenceOrderAsc(workflowId);
         if (allSteps.isEmpty()) {
             throw new BusinessException("Workflow has no steps defined: " + workflowId);
         }
@@ -94,21 +124,43 @@ public class ExecutionService {
         execution.setInputData(serialize(input));
 
         execution = executionRepository.save(execution);
-        log.info("Started execution id={} workflow={}", execution.getId(), workflowId);
-        return runStepsFrom(execution, firstStep, input);
+        log.info("Started execution id={} workflow={} idempotencyKey={}",
+                execution.getId(), workflowId,
+                hasKey ? idempotencyKey : "none");
+
+        Execution result = runStepsFrom(execution, firstStep, input);
+
+        // ── Cache idempotent result ───────────────────────────────────────────
+        if (hasKey) {
+            idempotencyService.markCompleted(idempotencyKey, result, 200);
+        }
+
+        return result;
     }
+
+    // ── Backward-compat overload (no idempotency key) ─────────────────────────
+    @Transactional
+    public Execution startExecution(UUID workflowId,
+                                    Map<String, Object> input,
+                                    String startedBy) {
+        return startExecution(workflowId, input, startedBy, null);
+    }
+
+    // ── Approval ──────────────────────────────────────────────────────────────
 
     @Transactional
     public Execution approveStep(UUID executionId, String approverEmail) {
         Execution execution = requireExecution(executionId);
 
         if (execution.getStatus() != ExecutionStatus.WAITING_FOR_APPROVAL) {
-            throw new BusinessException("Execution is not waiting for approval: " + executionId);
+            throw new BusinessException(
+                    "Execution is not waiting for approval: " + executionId);
         }
 
         Step currentStep = requireStep(execution.getCurrentStepId());
         Map<String, Object> input = deserializeInput(execution.getInputData());
-        List<Rule> rules = ruleRepository.findByStepIdOrderByPriorityAsc(currentStep.getId());
+        List<Rule> rules =
+                ruleRepository.findByStepIdOrderByPriorityAsc(currentStep.getId());
         Rule matched = ruleEvaluationService.evaluateRules(rules, input);
 
         completeLatestWaitingApprovalLog(
@@ -131,12 +183,15 @@ public class ExecutionService {
         return executionRepository.save(execution);
     }
 
+    // ── Rejection ─────────────────────────────────────────────────────────────
+
     @Transactional
     public Execution rejectStep(UUID executionId, String reason) {
         Execution execution = requireExecution(executionId);
 
         if (execution.getStatus() != ExecutionStatus.WAITING_FOR_APPROVAL) {
-            throw new BusinessException("Execution is not waiting for approval: " + executionId);
+            throw new BusinessException(
+                    "Execution is not waiting for approval: " + executionId);
         }
 
         Step currentStep = requireStep(execution.getCurrentStepId());
@@ -151,28 +206,33 @@ public class ExecutionService {
         execution.setStatus(ExecutionStatus.FAILED);
         execution.setCompletedAt(LocalDateTime.now());
         Execution saved = executionRepository.save(execution);
-        log.info("Execution id={} rejected at step='{}'", executionId, currentStep.getStepName());
+        log.info("Execution id={} rejected at step='{}'",
+                executionId, currentStep.getStepName());
         return saved;
     }
+
+    // ── Retry ─────────────────────────────────────────────────────────────────
 
     @Transactional
     public Execution retryFailedStep(UUID executionId) {
         Execution execution = requireExecution(executionId);
 
         if (execution.getStatus() != ExecutionStatus.FAILED) {
-            throw new BusinessException("Execution is not in FAILED state: " + executionId);
+            throw new BusinessException(
+                    "Execution is not in FAILED state: " + executionId);
         }
-
         if (execution.getCurrentStepId() == null) {
-            throw new BusinessException("Execution has no current step to retry: " + executionId);
+            throw new BusinessException(
+                    "Execution has no current step to retry: " + executionId);
         }
 
-        Step failedStep = requireStep(execution.getCurrentStepId());
-        int retryLimit  = readRetryLimit(failedStep);
+        Step failedStep   = requireStep(execution.getCurrentStepId());
+        int  retryLimit   = readRetryLimit(failedStep);
 
         if (execution.getRetryCount() >= retryLimit) {
             throw new BusinessException(
-                    "Retry limit of " + retryLimit + " exceeded for step '" + failedStep.getStepName() + "'");
+                    "Retry limit of " + retryLimit
+                    + " exceeded for step '" + failedStep.getStepName() + "'");
         }
 
         execution.setRetryCount(execution.getRetryCount() + 1);
@@ -180,11 +240,14 @@ public class ExecutionService {
         execution = executionRepository.save(execution);
 
         log.info("Retrying execution id={} step='{}' attempt={}/{}",
-                executionId, failedStep.getStepName(), execution.getRetryCount(), retryLimit);
+                executionId, failedStep.getStepName(),
+                execution.getRetryCount(), retryLimit);
 
         Map<String, Object> input = deserializeInput(execution.getInputData());
         return runStepsFrom(execution, failedStep, input);
     }
+
+    // ── Cancel ────────────────────────────────────────────────────────────────
 
     @Transactional
     public Execution cancelExecution(UUID executionId) {
@@ -192,7 +255,8 @@ public class ExecutionService {
 
         if (execution.getStatus() == ExecutionStatus.COMPLETED
                 || execution.getStatus() == ExecutionStatus.CANCELLED) {
-            throw new BusinessException("Cannot cancel a finished execution: " + executionId);
+            throw new BusinessException(
+                    "Cannot cancel a finished execution: " + executionId);
         }
 
         execution.setStatus(ExecutionStatus.CANCELLED);
@@ -202,6 +266,8 @@ public class ExecutionService {
         return saved;
     }
 
+    // ── Status ────────────────────────────────────────────────────────────────
+
     @Transactional(readOnly = true)
     public Execution getExecutionStatus(UUID executionId) {
         return requireExecution(executionId);
@@ -209,6 +275,12 @@ public class ExecutionService {
 
     // ── Step execution engine ─────────────────────────────────────────────────
 
+    /**
+     * Runs steps synchronously starting from {@code startStep}.
+     *
+     * For purely synchronous deployments this is called directly.
+     * For async execution, AsyncExecutionService wraps this with @Async.
+     */
     @Transactional
     public Execution runStepsFrom(Execution execution,
                                   Step startStep,
@@ -218,12 +290,12 @@ public class ExecutionService {
         while (currentStep != null) {
             String        evaluatedRule = null;
             UUID          nextStepId    = null;
-            String        errorMessage  = null;
             String        stepStatus;
             LocalDateTime stepStartedAt = LocalDateTime.now();
 
             try {
                 switch (currentStep.getStepType()) {
+
                     case TASK:
                         processTask(currentStep, input);
                         break;
@@ -235,17 +307,20 @@ public class ExecutionService {
                         break;
 
                     case APPROVAL:
-                        writeWaitingApprovalLog(execution.getId(), currentStep, stepStartedAt);
+                        writeWaitingApprovalLog(
+                                execution.getId(), currentStep, stepStartedAt);
                         execution.setStatus(ExecutionStatus.WAITING_FOR_APPROVAL);
                         execution.setCurrentStepId(currentStep.getId());
                         return executionRepository.save(execution);
 
                     default:
-                        throw new BusinessException("Unsupported step type: " + currentStep.getStepType());
+                        throw new BusinessException(
+                                "Unsupported step type: " + currentStep.getStepType());
                 }
 
-                List<Rule> rules  = ruleRepository.findByStepIdOrderByPriorityAsc(currentStep.getId());
-                Rule       matched = ruleEvaluationService.evaluateRules(rules, input);
+                List<Rule> rules =
+                        ruleRepository.findByStepIdOrderByPriorityAsc(currentStep.getId());
+                Rule matched = ruleEvaluationService.evaluateRules(rules, input);
 
                 if (matched != null) {
                     evaluatedRule = matched.getCondition();
@@ -254,12 +329,13 @@ public class ExecutionService {
                 stepStatus = "COMPLETED";
 
             } catch (Exception ex) {
-                log.error("Step '{}' failed: {}", currentStep.getStepName(), ex.getMessage(), ex);
-                errorMessage = ex.getMessage();
-                stepStatus   = "FAILED";
+                log.error("Step '{}' failed: {}",
+                        currentStep.getStepName(), ex.getMessage(), ex);
 
-                writeExecutionLog(execution.getId(), currentStep,
-                        stepStatus, null, null, errorMessage, null,
+                writeExecutionLog(
+                        execution.getId(), currentStep,
+                        "FAILED", null, null,
+                        ex.getMessage(), null,
                         stepStartedAt, LocalDateTime.now());
 
                 execution.setStatus(ExecutionStatus.FAILED);
@@ -267,8 +343,10 @@ public class ExecutionService {
                 return executionRepository.save(execution);
             }
 
-            writeExecutionLog(execution.getId(), currentStep,
-                    stepStatus, evaluatedRule, nextStepId, null, null,
+            writeExecutionLog(
+                    execution.getId(), currentStep,
+                    stepStatus, evaluatedRule, nextStepId,
+                    null, null,
                     stepStartedAt, LocalDateTime.now());
 
             if (nextStepId != null) {
@@ -283,7 +361,8 @@ public class ExecutionService {
             }
         }
 
-        log.warn("Execution id={} reached a null step — marking COMPLETED", execution.getId());
+        log.warn("Execution id={} reached a null step — marking COMPLETED",
+                execution.getId());
         execution.setStatus(ExecutionStatus.COMPLETED);
         execution.setCompletedAt(LocalDateTime.now());
         return executionRepository.save(execution);
@@ -295,7 +374,9 @@ public class ExecutionService {
         log.info("Processing TASK step: '{}'", step.getStepName());
     }
 
-    private void writeWaitingApprovalLog(UUID executionId, Step step, LocalDateTime startedAt) {
+    private void writeWaitingApprovalLog(UUID executionId,
+                                         Step step,
+                                         LocalDateTime startedAt) {
         executionLogRepository.save(ExecutionLog.builder()
                 .executionId(executionId)
                 .stepId(step.getId())
@@ -317,7 +398,8 @@ public class ExecutionService {
                 .findTopByExecutionIdAndStepIdAndStatusOrderByStartedAtDesc(
                         executionId, step.getId(), "WAITING_FOR_APPROVAL")
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Waiting approval log not found for execution=" + executionId + ", step=" + step.getId()));
+                        "Waiting approval log not found for execution="
+                        + executionId + ", step=" + step.getId()));
 
         waitingLog.setStatus(finalStatus);
         waitingLog.setEvaluatedRules(evaluatedRules);
@@ -353,9 +435,7 @@ public class ExecutionService {
                 Map<String, Object> config = objectMapper.readValue(
                         step.getConfiguration(), new TypeReference<>() {});
                 Object limit = config.get("retry_limit");
-                if (limit instanceof Number n) {
-                    return n.intValue();
-                }
+                if (limit instanceof Number n) return n.intValue();
             }
         } catch (Exception ignored) {
             // fall through to default

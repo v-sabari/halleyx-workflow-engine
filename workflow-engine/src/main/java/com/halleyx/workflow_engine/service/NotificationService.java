@@ -14,6 +14,16 @@ import org.springframework.stereotype.Service;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * NotificationService
+ *
+ * FIX: objectMapper is now the Spring-managed bean (constructor-injected via
+ * @RequiredArgsConstructor) instead of a locally created `new ObjectMapper()`.
+ * The shared bean (defined in RestClientConfig) has JavaTimeModule registered,
+ * so any date/time values inside a step's `configuration` JSON or inside
+ * executionInput are deserialised correctly instead of throwing
+ * InvalidDefinitionException for unsupported LocalDateTime handling.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -21,7 +31,7 @@ public class NotificationService {
 
     private final JavaMailSender         mailSender;
     private final NotificationRepository notificationRepository;
-    private final ObjectMapper           objectMapper = new ObjectMapper();
+    private final ObjectMapper           objectMapper;
 
     /**
      * Dispatches a NOTIFICATION step.
