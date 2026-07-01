@@ -25,7 +25,11 @@ public class RateLimitConfig {
     public FilterRegistrationBean<RateLimitFilter> rateLimitFilter() {
         FilterRegistrationBean<RateLimitFilter> bean = new FilterRegistrationBean<>();
         bean.setFilter(new RateLimitFilter());
-        bean.addUrlPatterns("/api/*");          // only rate-limit API paths
+        // Cover all API paths:
+        // /api/*          — all /api/v1/* endpoints (workflows, executions, steps, rules, keys)
+        // /notifications/* — NotificationController (mounted outside /api/v1)
+        // /audit-logs/*   — AuditLogController (mounted outside /api/v1)
+        bean.addUrlPatterns("/api/*", "/notifications/*", "/audit-logs/*");
         bean.setOrder(Ordered.LOWEST_PRECEDENCE - 10);
         bean.setName("rateLimitFilter");
         return bean;
