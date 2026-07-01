@@ -79,7 +79,10 @@ function WorkflowExecution() {
         completedAt:     ex.completedAt || "",
         startedBy:       ex.startedBy || startedBy,
         workflowVersion: ex.workflowVersion || "",
-        retryCount:      ex.retryCount ?? 0,
+        // BUG 8 FIX: backend Execution entity has @JsonProperty("retries") on
+        // the retryCount field, so the JSON key is "retries" not "retryCount".
+        // Reading ex.retryCount always returned undefined (→ displayed as 0).
+        retryCount:      ex.retries ?? ex.retryCount ?? 0,
       });
 
       // FIX F3: use the proper /executions/:id/logs endpoint via api instance

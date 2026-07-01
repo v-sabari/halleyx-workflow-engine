@@ -1,29 +1,35 @@
 import { useEffect, useState, useCallback } from "react";
+import { Fragment } from "react";
 import api from "../services/api";
 import "../styles/pages.css";
 
 /**
- * AuditLog — FIX F2
+ * AuditLog
  *
- * The spec's Audit Log table is execution-level, not step-level:
- *   Execution ID | Workflow | Version | Status | Started By | Start Time | End Time | Actions
+ * FIXES applied:
  *
- * This component now:
- *   1. Fetches GET /api/v1/executions (paginated, filterable by status)
- *   2. Shows one row per execution matching the spec table
- *   3. Provides a "View Logs" drill-down that fetches the step logs
- *      for that execution from GET /audit-logs?executionId=...
+ * BUG 6 — React fragment without key in .map().
+ * The outer element of executions.map() was <> (shorthand fragment) which
+ * cannot accept a key prop. React requires a key on the outermost element
+ * of every list item. Without it, React cannot correctly reconcile the list
+ * on re-render — rows can flash, update the wrong row, or lose their
+ * drill-down state when the list changes.
+ * FIX: replaced <> with <Fragment key={exec.id}> (named import from react).
+ *
+ * BUG 7 — Misleading comment claiming step logs live at /audit-logs.
+ * The actual call correctly uses api.get(`/executions/${execId}/logs`)
+ * which resolves to GET /api/v1/executions/:id/logs via the axios baseURL.
+ * The wrong comment would have caused the next developer to break the URL.
+ * FIX: corrected the comment.
  */
 
 async function fetchExecutions(params) {
-  // Uses the api axios instance (baseURL = /api/v1)
-  // Requires GET /api/v1/executions endpoint — see analysis Change 8 / ExecutionController
   const r = await api.get("/executions", { params });
   return r.data; // Page<Execution>
 }
 
 async function fetchStepLogs(execId) {
-  // Step-level logs live at /audit-logs (no /api/v1 prefix)
+  // Correct path: GET /api/v1/executions/:id/logs (via api axios instance with baseURL=/api/v1)
   const r = await api.get(`/executions/${execId}/logs`);
   return Array.isArray(r.data) ? r.data : (r.data?.content || []);
 }
@@ -55,7 +61,7 @@ function AuditLog() {
       setTotalPages(d.totalPages || 0);
       setTotalElements(d.totalElements || 0);
     } catch (err) {
-      setErrorMessage(err?.response?.data?.error || err.message || "Failed to load audit log.");
+      setErrorMessage(err?.message || "Failed to load audit log.");
     } finally {
       setLoading(false);
     }
@@ -124,7 +130,6 @@ function AuditLog() {
           </p>
         </div>
         <div className="page-header-actions">
-          {/* Status filter */}
           <select
             className="audit-filter-select"
             value={statusFilter}
@@ -177,14 +182,7 @@ function AuditLog() {
               {loading ? (
                 <tr>
                   <td colSpan={8} style={{ textAlign: "center", padding: 52 }}>
-                    <div
-                      style={{
-                        display:       "flex",
-                        flexDirection: "column",
-                        alignItems:    "center",
-                        gap:           12,
-                      }}
-                    >
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
                       <div className="spinner spinner--xl" />
                       <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>
                         Loading audit log…
@@ -206,20 +204,17 @@ function AuditLog() {
                 </tr>
               ) : (
                 executions.map(exec => (
-                  <>
-                    {/* ── Execution row (spec-compliant columns) ── */}
-                    <tr key={exec.id}>
+                  /* BUG 6 FIX: use named Fragment with key instead of shorthand <> */
+                  <Fragment key={exec.id}>
+                    {/* ── Execution row ── */}
+                    <tr>
                       <td>
                         <span className="execution-id" title={exec.id}>
                           {exec.id?.slice(0, 12)}…
                         </span>
                       </td>
                       <td>
-                        <span
-                          className="execution-id"
-                          title={exec.workflowId}
-                          style={{ maxWidth: 130 }}
-                        >
+                        <span className="execution-id" title={exec.workflowId} style={{ maxWidth: 130 }}>
                           {exec.workflowId?.slice(0, 12)}…
                         </span>
                       </td>
@@ -231,9 +226,7 @@ function AuditLog() {
                           {label(exec.status)}
                         </span>
                       </td>
-                      <td style={{ fontWeight: 600 }}>
-                        {exec.startedBy || "—"}
-                      </td>
+                      <td style={{ fontWeight: 600 }}>{exec.startedBy || "—"}</td>
                       <td style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
                         {fmt(exec.startedAt)}
                       </td>
@@ -241,10 +234,7 @@ function AuditLog() {
                         {fmt(exec.completedAt)}
                       </td>
                       <td>
-                        <button
-                          className="view-log-btn"
-                          onClick={() => handleViewLogs(exec)}
-                        >
+                        <button className="view-log-btn" onClick={() => handleViewLogs(exec)}>
                           {selectedId === exec.id ? "Hide" : "View Logs"}
                         </button>
                       </td>
@@ -255,14 +245,7 @@ function AuditLog() {
                       <tr key={`${exec.id}-detail`}>
                         <td colSpan={8} className="detail-cell">
                           {detailLoading ? (
-                            <div
-                              style={{
-                                padding:    24,
-                                display:    "flex",
-                                alignItems: "center",
-                                gap:        10,
-                              }}
-                            >
+                            <div style={{ padding: 24, display: "flex", alignItems: "center", gap: 10 }}>
                               <span className="spinner spinner--md" />
                               <span className="audit-loading">Loading step logs…</span>
                             </div>
@@ -272,9 +255,7 @@ function AuditLog() {
                             <div className="execution-detail-panel">
                               <h4>
                                 Step Logs — Execution{" "}
-                                <code style={{ fontSize: 12 }}>
-                                  {detail.id?.slice(0, 12)}…
-                                </code>
+                                <code style={{ fontSize: 12 }}>{detail.id?.slice(0, 12)}…</code>
                               </h4>
                               {detail.logs?.length > 0 ? (
                                 <div className="table-scroll audit-detail-table">
@@ -293,9 +274,7 @@ function AuditLog() {
                                     <tbody>
                                       {detail.logs.map(l => (
                                         <tr key={l.id}>
-                                          <td style={{ fontWeight: 600 }}>
-                                            {l.stepName}
-                                          </td>
+                                          <td style={{ fontWeight: 600 }}>{l.stepName}</td>
                                           <td>
                                             {l.stepType ? (
                                               <span className={`badge badge--${l.stepType}`}>
@@ -310,26 +289,15 @@ function AuditLog() {
                                             </span>
                                           </td>
                                           <td>
-                                            <code style={{ fontSize: 11 }}>
-                                              {l.evaluatedRules || "—"}
-                                            </code>
+                                            <code style={{ fontSize: 11 }}>{l.evaluatedRules || "—"}</code>
                                           </td>
-                                          <td style={{ fontSize: 12 }}>
-                                            {l.selectedNextStepId || "END"}
-                                          </td>
-                                          <td
-                                            style={{
-                                              fontFamily: "var(--font-mono)",
-                                              fontSize:   12,
-                                            }}
-                                          >
+                                          <td style={{ fontSize: 12 }}>{l.selectedNextStepId || "END"}</td>
+                                          <td style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>
                                             {calcDur(l)}
                                           </td>
                                           <td>
                                             {l.errorMessage ? (
-                                              <span className="log-error-text">
-                                                {l.errorMessage}
-                                              </span>
+                                              <span className="log-error-text">{l.errorMessage}</span>
                                             ) : "—"}
                                           </td>
                                         </tr>
@@ -347,7 +315,7 @@ function AuditLog() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 ))
               )}
             </tbody>
@@ -370,9 +338,7 @@ function AuditLog() {
           >
             ← Previous
           </button>
-          <span className="page-info">
-            Page {page + 1} of {totalPages || 1}
-          </span>
+          <span className="page-info">Page {page + 1} of {totalPages || 1}</span>
           <button
             className="page-btn"
             disabled={page + 1 >= totalPages || loading}
