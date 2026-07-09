@@ -57,11 +57,13 @@ function AppShell({ children }) {
 
   return (
     <div className={`app-shell ${sidebarOpen ? "sidebar-open" : ""}`}>
-      <div
-        className="sidebar-backdrop"
-        onClick={() => setSidebarOpen(false)}
-        aria-hidden="true"
-      />
+      {sidebarOpen && (
+  <div
+    className="sidebar-backdrop"
+    onClick={() => setSidebarOpen(false)}
+    aria-hidden="true"
+  />
+)}
 
       <aside className="app-sidebar">
         <button

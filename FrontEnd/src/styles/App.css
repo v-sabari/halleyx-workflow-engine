@@ -313,11 +313,15 @@ body {
 
 /* ── Mobile backdrop ───────────────────────────────────────── */
 .sidebar-backdrop {
+  display: none;
+}
+
+.app-shell.sidebar-open .sidebar-backdrop {
+  display: block;
   position: fixed;
   inset: 0;
   z-index: 1150;
   background: rgba(10, 12, 24, 0.45);
-  /* backdrop-filter: blur(4px); */
   animation: fadeIn var(--duration-fast) var(--ease-fast) both;
 }
 
