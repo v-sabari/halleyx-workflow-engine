@@ -1,6 +1,6 @@
 /* ============================================================
    INDEX.CSS — Master import
-   Import order matters: tokens → base → components → pages → premium overrides
+   Order matters: tokens → base → components → shell → pages → overrides
    ============================================================ */
 
 @import './tokens.css';
