@@ -19,9 +19,12 @@ import org.springframework.security.config.Customizer;
  *  - STATELESS session — no cookies, no CSRF surface (all auth is per-request via header).
  *  - CSRF disabled — correct for a token-authenticated REST API with no browser session.
  *  - Every API endpoint requires ROLE_API_CLIENT (set by ApiKeyAuthenticationFilter).
- *  - POST /api/v1/keys/issue is the bootstrap endpoint; it is permitted without auth
- *    so the very first key can be created. In production this endpoint should be
- *    restricted at the network/gateway layer (VPN only, firewall rule, etc.).
+ *  - POST /api/v1/keys/issue is the bootstrap endpoint. It is exempted from the
+ *    X-API-Key check here ONLY because ApiKeyManagementController.issue() enforces
+ *    its own mandatory X-Bootstrap-Secret header check (constant-time compare
+ *    against APP_BOOTSTRAP_SECRET, fails closed if unset). Do not remove that
+ *    in-handler check — without it this route would be a full auth bypass, as it
+ *    grants a fully-privileged ROLE_API_CLIENT key to anyone who calls it.
  *  - OPTIONS (preflight) requests are always permitted so the browser CORS flow works.
  *  - X-Frame-Options, X-Content-Type-Options, and HSTS headers added via Spring Security's
  *    default headers (enabled by default when using the DSL).
